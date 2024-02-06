@@ -386,6 +386,8 @@ class PyMySqlTokenQuery(BasePlugin):
             self._sqlconfig[key] = value
 
     def lookup(self, token):
+        import pymysql
+
         if self._sqlconfig is None:
             self._load_sqlconfig()
 
