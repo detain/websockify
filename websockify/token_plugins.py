@@ -339,7 +339,7 @@ class MySqlTokenQuery(BasePlugin):
         # Set up MySQL connection
         try:
             connection = mysql.connector.connect(
-                host=self._sqlconfig['db'],
+                host=self._sqlconfig['host'],
                 user=self._sqlconfig['user'],
                 password=self._sqlconfig['passwd'],
                 database=self._sqlconfig['db']
@@ -362,6 +362,61 @@ class MySqlTokenQuery(BasePlugin):
             # If there is a response row, split the value and return (host, port)
             if row:
                 host, port = row[0].split(':')
+                return host, int(port)
+            else:
+                return None
+
+        except Exception as e:
+            logger.error(f"Error executing MySQL query: {e}")
+            return None
+
+
+class PyMySqlTokenQuery(BasePlugin):
+    def __init__(self, *args, **kwargs):
+        super().__init__(*args, **kwargs)
+        self._sqlconfig = None
+
+    def _load_sqlconfig(self):
+        with open(self.source, 'r') as file:
+            lines = [line.strip() for line in file.readlines() if line.strip() and not line.startswith('#')]
+        
+        self._sqlconfig = {}
+        for line in lines:
+            key, value = re.split('=\s*', line, maxsplit=1)
+            self._sqlconfig[key] = value
+
+    def lookup(self, token):
+        if self._sqlconfig is None:
+            self._load_sqlconfig()
+
+        # Set up MySQL connection using pymysql
+        try:
+            connection = pymysql.connect(
+                host=self._sqlconfig['host'],
+                user=self._sqlconfig['user'],
+                password=self._sqlconfig['passwd'],
+                database=self._sqlconfig['db'],
+                autocommit=True,
+                cursorclass=pymysql.cursors.DictCursor
+            )
+            cursor = connection.cursor()
+
+            # Replace '_TOKEN_' in the query with the actual token
+            query = self._sqlconfig['match_query'].replace('_TOKEN_', token)
+
+            # Execute the query
+            cursor.execute(query)
+
+            # Fetch the first row
+            row = cursor.fetchone()
+
+            # Close the cursor and connection
+            cursor.close()
+            connection.close()
+
+            # If there is a response row, split the value and return (host, port)
+            if row:
+                host, port = row['as_data'].split(':')  # Replace 'column_name' with the actual column name in your response
                 return host, int(port)
             else:
                 return None
