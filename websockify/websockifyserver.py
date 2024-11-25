@@ -187,11 +187,11 @@ class WebSockifyRequestHandler(WebSocketRequestHandlerMixIn, SimpleHTTPRequestHa
         """ Send a WebSocket orderly close frame. """
         self.request.shutdown(socket.SHUT_RDWR, code, reason)
 
-    def send_pong(self, data=''.encode('ascii')):
+    def send_pong(self, data=b''):
         """ Send a WebSocket pong frame. """
         self.request.pong(data)
 
-    def send_ping(self, data=''.encode('ascii')):
+    def send_ping(self, data=b''):
         """ Send a WebSocket ping frame. """
         self.request.ping(data)
 
@@ -470,7 +470,8 @@ class WebSockifyServer():
             if connect:
                 sock.connect(addrs[0][4])
                 if use_ssl:
-                    sock = ssl.wrap_socket(sock)
+                    context = ssl.create_default_context()
+                    sock = context.wrap_socket(sock, server_hostname=host)
             else:
                 sock.setsockopt(socket.SOL_SOCKET, socket.SO_REUSEADDR, 1)
                 sock.bind(addrs[0][4])
@@ -718,20 +719,25 @@ class WebSockifyServer():
         be overridden) for each new client connection.
         """
 
-        if self.listen_fd != None:
-            lsock = socket.fromfd(self.listen_fd, socket.AF_INET, socket.SOCK_STREAM)
-        elif self.unix_listen != None:
-            lsock = self.socket(host=None,
-                                unix_socket=self.unix_listen, 
-                                unix_socket_mode=self.unix_listen_mode, 
-                                unix_socket_listen=True)
-        else:
-            lsock = self.socket(self.listen_host, self.listen_port, False,
-                                self.prefer_ipv6,
-                                tcp_keepalive=self.tcp_keepalive,
-                                tcp_keepcnt=self.tcp_keepcnt,
-                                tcp_keepidle=self.tcp_keepidle,
-                                tcp_keepintvl=self.tcp_keepintvl)
+        try:
+            if self.listen_fd != None:
+                lsock = socket.fromfd(self.listen_fd, socket.AF_INET, socket.SOCK_STREAM)
+            elif self.unix_listen != None:
+                lsock = self.socket(host=None,
+                                    unix_socket=self.unix_listen,
+                                    unix_socket_mode=self.unix_listen_mode,
+                                    unix_socket_listen=True)
+            else:
+                lsock = self.socket(self.listen_host, self.listen_port, False,
+                                    self.prefer_ipv6,
+                                    tcp_keepalive=self.tcp_keepalive,
+                                    tcp_keepcnt=self.tcp_keepcnt,
+                                    tcp_keepidle=self.tcp_keepidle,
+                                    tcp_keepintvl=self.tcp_keepintvl)
+        except OSError as e:
+            self.msg("Openening socket failed: %s", str(e))
+            self.vmsg("exception", exc_info=True)
+            sys.exit()
 
         if self.daemon:
             keepfd = self.get_log_fd()
